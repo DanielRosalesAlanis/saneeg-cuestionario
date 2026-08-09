@@ -7,12 +7,6 @@ export const B1 = [
     opts: ['Sí', 'No'],
   },
   {
-    id: 'b1_2',
-    text: 'Escribe tu nombre completo (iniciando por apellidos)',
-    type: 'text',
-    ph: 'Apellido Paterno Apellido Materno Nombre(s)',
-  },
-  {
     id: 'b1_3',
     text: 'Indica tu género',
     type: 'single',
@@ -26,21 +20,6 @@ export const B1 = [
     inputMode: 'numeric',
   },
   {
-    id: 'b1_5',
-    text: 'Número telefónico para enviarte tus resultados por WhatsApp',
-    type: 'text',
-    ph: '55 1234 5678',
-    inputType: 'tel',
-    prefilled: true,
-  },
-  {
-    id: 'b1_6',
-    text: 'Indica tu correo electrónico (personal o institucional)',
-    type: 'text',
-    ph: 'ejemplo@correo.com',
-    inputType: 'email',
-  },
-  {
     id: 'b1_7',
     text: 'Indica tu nivel de estudios actualmente',
     type: 'single',
@@ -51,12 +30,6 @@ export const B1 = [
     text: '¿En qué escuela estás inscrito(a)?',
     type: 'text',
     ph: 'Nombre de la institución',
-  },
-  {
-    id: 'b1_9',
-    text: 'Indica tu número de control escolar / matrícula / nombre de referencia',
-    type: 'text',
-    ph: 'Ej. 20230001 o tu nombre',
   },
   {
     id: 'b1_10',

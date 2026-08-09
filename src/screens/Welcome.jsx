@@ -44,11 +44,9 @@ export function Welcome({ onNext }) {
           lineHeight: 1.75,
           maxWidth: 300,
         }}>
-          Responde con honestidad. Este cuestionario es{' '}
-          <strong style={{ color: C.navy }}>confidencial</strong> — tus
-          respuestas se guardan de forma segura y ligadas a tu número de
-          teléfono, solo para darte seguimiento a ti.
-          Tus resultados te ayudarán a conocer tu estado emocional actual.
+          Puedes contestar sin crear una cuenta ni proporcionar nombre, teléfono o correo.
+          Tus resultados te ayudarán a conocer tu estado emocional actual y al finalizar
+          recibirás un folio para solicitar una cita si así lo deseas.
         </p>
       </div>
 

@@ -1,18 +1,27 @@
+import { useState } from 'react';
 import { C } from '../constants/colors';
 import { Header } from '../components/Header';
 import { scoreDASS } from '../constants/questions';
 import { HELP_LINES } from '../constants/mockData';
 import {
   IconSmile, IconFrown, IconHeart, IconUsers,
-  IconPhone, IconSearch, IconAlertTriangle, IconDownload,
+  IconPhone, IconSearch, IconAlertTriangle,
 } from '../components/Icons';
 
+// Cada subescala del DASS-21 suma 7 items de 0 a 3 puntos -> 21 es el maximo
+// posible. El cliente pidio mostrar el porcentaje respecto a ese maximo en
+// vez del puntaje crudo (ej. en vez de "9/moderado", mostrar "43%").
+const MAX_SCORE_POR_SUBESCALA = 21;
+const toPorcentaje = (score) => Math.round((score / MAX_SCORE_POR_SUBESCALA) * 100);
+
+// Escala de bajo (#00BABD, teal) a alto (#162983, navy) en vez de rojo/amarillo
+// -- decisión del cliente para no alarmar al paciente con colores de "semáforo".
 const SEVERITY_COLORS = {
-  'Normal':                { bg: '#ECFDF5', border: '#10B981', text: '#065F46' },
-  'Leve':                  { bg: '#FFF7ED', border: '#F59E0B', text: '#92400E' },
-  'Moderado':              { bg: '#FFF7ED', border: '#F59E0B', text: '#92400E' },
-  'Severo':                { bg: '#FEF2F2', border: '#EF4444', text: '#991B1B' },
-  'Extremadamente severo': { bg: '#FEF2F2', border: '#EF4444', text: '#991B1B' },
+  'Normal':                { bg: '#E6FAFA', border: '#00BABD', text: '#007A7D' },
+  'Leve':                  { bg: '#E5F4F7', border: '#0796AD', text: '#045C6D' },
+  'Moderado':              { bg: '#E6EFF5', border: '#0E72A0', text: '#073F5C' },
+  'Severo':                { bg: '#E7EBF5', border: '#164E92', text: '#0F2E5C' },
+  'Extremadamente severo': { bg: '#E8E9F5', border: '#162983', text: '#0F1A52' },
 };
 
 function getOverallMessage(sevD, sevA, sevS) {
@@ -20,29 +29,31 @@ function getOverallMessage(sevD, sevA, sevS) {
   const moderate = [sevD, sevA, sevS].some(s => s === 'Moderado');
   const allNormal = [sevD, sevA, sevS].every(s => s === 'Normal');
 
+  // Misma escala teal->navy de SEVERITY_COLORS -- sin rojo/amarillo en
+  // ningún tono del mensaje general, para no alarmar al paciente.
   if (allNormal) return {
     Icon: IconSmile,
     title: '¡Buen estado emocional!',
     msg: 'Tus resultados indican que actualmente te encuentras dentro de rangos normales. Sigue cuidando tu bienestar con hábitos saludables.',
-    color: C.success,
+    color: '#00BABD',
   };
   if (critical) return {
     Icon: IconHeart,
     title: 'Te recomendamos buscar apoyo',
     msg: 'Tus resultados muestran niveles que ameritan atención profesional. No estás solo(a); hay profesionales disponibles para ayudarte.',
-    color: C.error,
+    color: '#162983',
   };
   if (moderate) return {
     Icon: IconUsers,
     title: 'Considera hablar con alguien',
     msg: 'Tus resultados indican niveles moderados de estrés emocional. Un profesional de salud mental puede ayudarte a manejarlos mejor.',
-    color: C.warn,
+    color: '#0E72A0',
   };
   return {
     Icon: IconFrown,
     title: 'Presta atención a tu bienestar',
     msg: 'Tus resultados muestran niveles leves. Con apoyo y hábitos saludables puedes mejorar tu bienestar emocional.',
-    color: C.warn,
+    color: '#0796AD',
   };
 }
 
@@ -63,29 +74,10 @@ function ScoreCard({ label, score, severity, Icon }) {
     }}>
       <Icon size={22} style={{ color: style.text }} />
       <p style={{ fontSize: 13, fontWeight: 700, color: style.text }}>{label}</p>
-      <p style={{ fontSize: 28, fontWeight: 900, color: style.text, lineHeight: 1 }}>{score}</p>
+      <p style={{ fontSize: 28, fontWeight: 900, color: style.text, lineHeight: 1 }}>{toPorcentaje(score)}%</p>
       <p style={{ fontSize: 11, fontWeight: 600, color: style.text, lineHeight: 1.3 }}>{severity}</p>
     </div>
   );
-}
-
-function downloadCSV(data, userData, scores) {
-  const { d, a, s, sevD, sevA, sevS } = scores;
-  const rows = [
-    ['pregunta', 'respuesta'],
-    ...Object.entries(data).map(([key, value]) => [key, Array.isArray(value) ? value.join(' | ') : value]),
-    ['depresion_score', d], ['depresion_severidad', sevD],
-    ['ansiedad_score', a], ['ansiedad_severidad', sevA],
-    ['estres_score', s], ['estres_severidad', sevS],
-  ];
-  const csv = rows.map(row => row.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a_ = document.createElement('a');
-  a_.href = url;
-  a_.download = `resultados_${userData?.phone || 'saneeg'}.csv`;
-  a_.click();
-  URL.revokeObjectURL(url);
 }
 
 function toScores(resultado) {
@@ -97,7 +89,114 @@ function toScores(resultado) {
   };
 }
 
-export function Results({ data, userData, resultado, onProfessionals, onExit }) {
+function FolioCard({ folio, onRegenerateCode }) {
+  const [copied, setCopied] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const codigoDisponible = Boolean(folio?.codigoVinculacion);
+
+  async function copyCredentials() {
+    try {
+      await navigator.clipboard.writeText(
+        `Folio: ${folio.folio}\nCódigo privado: ${folio.codigoVinculacion}`,
+      );
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      setError('No se pudo copiar automáticamente. Anota ambos códigos.');
+    }
+  }
+
+  async function regenerate() {
+    setLoading(true);
+    setError('');
+    try {
+      await onRegenerateCode();
+    } catch (err) {
+      setError(err.message || 'No se pudo generar un código nuevo.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (!folio?.folio) return null;
+
+  return (
+    <div style={{
+      padding: '18px 16px', borderRadius: 14, marginBottom: 28,
+      background: C.navyLight, border: `1.5px solid ${C.navy}`,
+    }}>
+      <h2 style={{ fontSize: 17, fontWeight: 800, color: C.navy, marginBottom: 6 }}>
+        Guarda tu folio
+      </h2>
+      <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.55, marginBottom: 14 }}>
+        Lo necesitarás para vincular esta evaluación con tu cuenta y poder agendar una cita.
+        El código privado no debe compartirse.
+      </p>
+
+      <div style={{
+        padding: '12px', borderRadius: 10, background: C.white,
+        border: `1px solid ${C.border}`, marginBottom: 10,
+      }}>
+        <p style={{ fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 3 }}>FOLIO</p>
+        <p style={{ fontSize: 18, color: C.navy, fontWeight: 900, letterSpacing: '1px', overflowWrap: 'anywhere' }}>
+          {folio.folio}
+        </p>
+      </div>
+
+      {codigoDisponible ? (
+        <>
+          <div style={{
+            padding: '12px', borderRadius: 10, background: C.white,
+            border: `1px solid ${C.border}`, marginBottom: 12,
+          }}>
+            <p style={{ fontSize: 11, color: C.muted, fontWeight: 700, marginBottom: 3 }}>CÓDIGO PRIVADO</p>
+            <p style={{ fontSize: 15, color: C.navy, fontWeight: 800, letterSpacing: '0.7px', overflowWrap: 'anywhere' }}>
+              {folio.codigoVinculacion}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={copyCredentials}
+            style={{
+              width: '100%', padding: '11px 16px', borderRadius: 10,
+              background: C.navy, color: C.white, border: 'none',
+              fontSize: 14, fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            {copied ? 'Copiado' : 'Copiar folio y código'}
+          </button>
+        </>
+      ) : (
+        <div>
+          <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.5, marginBottom: 10 }}>
+            Por seguridad, el código privado no se conserva en texto legible. Puedes generar uno nuevo;
+            cualquier código anterior dejará de funcionar.
+          </p>
+          <button
+            type="button"
+            onClick={regenerate}
+            disabled={loading}
+            style={{
+              width: '100%', padding: '11px 16px', borderRadius: 10,
+              background: C.navy, color: C.white, border: 'none',
+              fontSize: 14, fontWeight: 700, cursor: loading ? 'wait' : 'pointer',
+              opacity: loading ? 0.65 : 1,
+            }}
+          >
+            {loading ? 'Generando…' : 'Generar un código nuevo'}
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <p style={{ fontSize: 12, color: C.error, lineHeight: 1.5, marginTop: 10 }}>{error}</p>
+      )}
+    </div>
+  );
+}
+
+export function Results({ data, resultado, folio, onRegenerateCode, onProfessionals, onExit }) {
   // El resultado que calculó y guardó el backend es la fuente de verdad —
   // recalcular en el cliente solo como respaldo si por algún motivo no llegó.
   const scores = toScores(resultado) ?? scoreDASS(data);
@@ -148,52 +247,8 @@ export function Results({ data, userData, resultado, onProfessionals, onExit }) 
           </div>
         </div>
 
-        {/* Descarga de resultados en CSV */}
-        <button
-          onClick={() => downloadCSV(data, userData, scores)}
-          style={{
-            width: '100%',
-            padding: '14px 16px',
-            borderRadius: 12,
-            background: '#ECFDF5',
-            border: '1.5px solid #10B981',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            marginBottom: 28,
-            cursor: 'pointer',
-            textAlign: 'left',
-          }}
-        >
-          <div style={{
-            width: 36, height: 36, borderRadius: '50%',
-            background: '#10B981', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', flexShrink: 0, color: C.white,
-          }}>
-            <IconDownload size={18} strokeWidth={2.4} />
-          </div>
-          <div>
-            <p style={{ fontSize: 14, fontWeight: 700, color: '#065F46' }}>Descargar resultados (CSV)</p>
-            <p style={{ fontSize: 13, color: '#065F46', opacity: 0.8 }}>
-              Guarda tus respuestas y puntuaciones en tu dispositivo
-            </p>
-          </div>
-        </button>
+        <FolioCard folio={folio} onRegenerateCode={onRegenerateCode} />
 
-        {/* Líneas de ayuda */}
-        {esCritico && (
-          <div style={{
-            padding: '14px 16px', borderRadius: 12, marginBottom: 16,
-            background: '#FEF2F2', border: `1.5px solid ${C.error}`,
-          }}>
-            <p style={{ fontSize: 14, fontWeight: 800, color: '#991B1B', marginBottom: 2 }}>
-              No tienes que pasar por esto solo(a)
-            </p>
-            <p style={{ fontSize: 13, color: '#991B1B', lineHeight: 1.55 }}>
-              Tus resultados muestran niveles que ameritan hablar con alguien pronto. Las líneas de abajo son gratuitas y confidenciales — considera llamar hoy mismo.
-            </p>
-          </div>
-        )}
         <h2 style={{ fontSize: 17, fontWeight: 800, color: C.navy, marginBottom: 14 }}>
           Líneas de apoyo en México
         </h2>
@@ -205,12 +260,12 @@ export function Results({ data, userData, resultado, onProfessionals, onExit }) 
               gap: 12,
               padding: '14px 16px',
               borderRadius: 12,
-              background: esCritico ? '#FEF2F2' : C.surface,
-              border: `1.5px solid ${esCritico ? C.error : C.border}`,
+              background: esCritico ? '#E8E9F5' : C.surface,
+              border: `1.5px solid ${esCritico ? '#162983' : C.border}`,
             }}>
               <div style={{
                 width: 40, height: 40, borderRadius: 10,
-                background: `${line.color}18`, color: line.color,
+                background: '#16298318', color: '#162983',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0,
               }}>
@@ -225,8 +280,8 @@ export function Results({ data, userData, resultado, onProfessionals, onExit }) 
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   padding: '8px 12px', borderRadius: 10,
-                  background: C.navyLight, border: 'none',
-                  fontSize: 13, fontWeight: 700, color: C.navy,
+                  background: '#162983', border: 'none',
+                  fontSize: 13, fontWeight: 700, color: C.white,
                   textDecoration: 'none', flexShrink: 0,
                   cursor: 'pointer',
                 }}

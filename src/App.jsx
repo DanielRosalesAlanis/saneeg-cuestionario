@@ -1,85 +1,87 @@
-import { useState, useEffect } from 'react';
-import { Welcome }           from './screens/Welcome';
-import { Register }          from './screens/Register';
-import { Login }             from './screens/Login';
-import { VerifyCode }        from './screens/VerifyCode';
-import { Privacy }           from './screens/Privacy';
-import { QuestionBlock }     from './screens/QuestionBlock';
-import { Results }           from './screens/Results';
-import { SaveError }         from './screens/SaveError';
+import { useEffect, useState } from 'react';
+import { Welcome }            from './screens/Welcome';
+import { Privacy }            from './screens/Privacy';
+import { QuestionBlock }      from './screens/QuestionBlock';
+import { Results }            from './screens/Results';
+import { SaveError }          from './screens/SaveError';
 import { ProfessionalSearch } from './screens/ProfessionalSearch';
-import { B1, DASS, B3 }      from './constants/questions';
+import { B1, DASS, B3 }       from './constants/questions';
 import {
-  iniciarAplicacion, guardarBloque, obtenerEstado,
-  saveProgress, loadProgress, clearProgress,
+  iniciarAplicacion,
+  guardarBloque,
+  obtenerEstado,
+  reemitirCodigoVinculacion,
+  saveProgress,
+  loadProgress,
+  clearProgress,
 } from './api/aplicaciones';
 
-const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === 'true';
-
+const AVISO_PRIVACIDAD_VERSION = '2026-08-08';
 const BLOQUE_STEP = { 1: 'b1', 2: 'dass', 3: 'b3' };
 const BLOQUE_PREFIX = { 1: 'b1_', 2: 'dass_', 3: 'b3_' };
 
 export default function App() {
-  const [step, setStep]         = useState('welcome');
-  const [prevStep, setPrevStep] = useState(null);
-  const [userData, setUserData] = useState({ phone: '' });
-  const [answers, setAnswers]   = useState({});
+  const [step, setStep] = useState('welcome');
+  const [answers, setAnswers] = useState({});
   const [aplicacionId, setAplicacionId] = useState(null);
   const [resultado, setResultado] = useState(null);
-  const [saveError, setSaveError] = useState(null); // { message, retry }
+  const [folio, setFolio] = useState(null);
+  const [saveError, setSaveError] = useState(null);
   const [checking, setChecking] = useState(() => Boolean(loadProgress()));
 
   useEffect(() => {
     const saved = loadProgress();
-    if (!saved) return;
+    if (!saved?.aplicacionId) return;
 
     obtenerEstado(saved.aplicacionId)
       .then(estado => {
+        setAplicacionId(saved.aplicacionId);
+
         if (estado.estado === 'COMPLETA') {
-          clearProgress();
-          setChecking(false);
+          setResultado(estado.resultado);
+          setFolio(estado.folio);
+          setStep('results');
           return;
         }
-        setAplicacionId(saved.aplicacionId);
-        setUserData({ phone: saved.phone });
-        setAnswers(prev => ({ ...prev, b1_5: saved.phone }));
-        const siguienteBloque = [1, 2, 3].find(b => !estado.bloquesGuardados.includes(b));
-        go(BLOQUE_STEP[siguienteBloque] ?? 'results', 'welcome');
-        setChecking(false);
+
+        const siguienteBloque = [1, 2, 3]
+          .find(bloque => !estado.bloquesGuardados.includes(bloque));
+        setStep(BLOQUE_STEP[siguienteBloque] ?? 'b1');
       })
       .catch(() => {
         clearProgress();
-        setChecking(false);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        setAplicacionId(null);
+        setStep('welcome');
+      })
+      .finally(() => setChecking(false));
   }, []);
 
-  function go(next, back = null) {
-    setPrevStep(back ?? step);
-    setStep(next);
-  }
-
   function mergeAnswers(patch) {
-    setAnswers(prev => ({ ...prev, ...patch }));
+    setAnswers(previous => ({ ...previous, ...patch }));
   }
 
   async function withSaveGuard(action) {
     try {
       setSaveError(null);
       await action();
-    } catch (err) {
-      setSaveError({ message: err.message, retry: action });
+    } catch (error) {
+      setSaveError({ message: error.message, retry: action });
     }
   }
 
-  function iniciarYContinuar(phone, nextStep, backStep) {
-    setUserData({ phone });
-    mergeAnswers({ b1_5: phone });
+  function aceptarPrivacidadYContinuar(consentimiento = {}) {
     withSaveGuard(async () => {
-      const { aplicacionId: id } = await iniciarAplicacion(phone);
-      setAplicacionId(id);
-      saveProgress(id, phone);
-      go(nextStep, backStep);
+      // Al regresar desde B1, la aplicación ya contiene el consentimiento y
+      // no debe crearse otra sesión anónima.
+      if (!aplicacionId) {
+        const estado = await iniciarAplicacion(
+          AVISO_PRIVACIDAD_VERSION,
+          Boolean(consentimiento.aceptaFinalidadesSecundarias),
+        );
+        setAplicacionId(estado.aplicacionId);
+        saveProgress(estado.aplicacionId);
+      }
+      setStep('b1');
     });
   }
 
@@ -87,23 +89,36 @@ export default function App() {
     withSaveGuard(async () => {
       const prefix = BLOQUE_PREFIX[bloque];
       const subset = Object.fromEntries(
-        Object.entries(answers).filter(([key]) => key.startsWith(prefix))
+        Object.entries(answers).filter(([key]) => key.startsWith(prefix)),
       );
-      const estado = await guardarBloque(aplicacionId, bloque, subset);
-      if (estado.resultado) {
-        setResultado(estado.resultado);
-        clearProgress();
+      let estado;
+      try {
+        estado = await guardarBloque(aplicacionId, bloque, subset);
+      } catch (error) {
+        // Si la respuesta del último guardado se perdió, el backend puede
+        // haber finalizado correctamente. Recuperar el estado evita pedir al
+        // participante que repita todo y permite emitir otro código privado.
+        if (bloque !== 3 || error.status !== 409) throw error;
+        estado = await obtenerEstado(aplicacionId);
+        if (estado.estado !== 'COMPLETA') throw error;
       }
-      go(nextStep, BLOQUE_STEP[bloque]);
+      if (estado.resultado) setResultado(estado.resultado);
+      if (estado.folio) setFolio(estado.folio);
+      setStep(nextStep);
     });
+  }
+
+  async function renovarCodigoVinculacion() {
+    const nuevoFolio = await reemitirCodigoVinculacion(aplicacionId);
+    setFolio(nuevoFolio);
   }
 
   function reset() {
     clearProgress();
     setAnswers({});
-    setUserData({ phone: '' });
     setAplicacionId(null);
     setResultado(null);
+    setFolio(null);
     setStep('welcome');
   }
 
@@ -118,35 +133,13 @@ export default function App() {
   );
 
   if (step === 'welcome') return (
-    <Welcome onNext={() => go('register')} />
-  );
-
-  if (step === 'register') return (
-    <Register
-      onNext={phone => iniciarYContinuar(phone, DEMO_MODE ? 'privacy' : 'verify', 'register')}
-      onLogin={() => go('login')}
-    />
-  );
-
-  if (step === 'login') return (
-    <Login
-      onNext={phone => iniciarYContinuar(phone, DEMO_MODE ? 'privacy' : 'verify', 'login')}
-      onRegister={() => go('register')}
-    />
-  );
-
-  if (step === 'verify') return (
-    <VerifyCode
-      phone={userData.phone}
-      onNext={() => go('privacy', 'register')}
-      onBack={() => go(prevStep ?? 'register')}
-    />
+    <Welcome onNext={() => setStep('privacy')} />
   );
 
   if (step === 'privacy') return (
     <Privacy
-      onNext={() => go('b1', 'privacy')}
-      onBack={() => go(DEMO_MODE ? (prevStep ?? 'register') : 'verify', 'privacy')}
+      onNext={aceptarPrivacidadYContinuar}
+      onBack={() => setStep('welcome')}
     />
   );
 
@@ -161,7 +154,7 @@ export default function App() {
       pctStart={10}
       pctEnd={35}
       onFinish={() => guardarBloqueYContinuar(1, 'dass')}
-      onBack={() => go('privacy', 'b1')}
+      onBack={() => setStep('privacy')}
     />
   );
 
@@ -176,7 +169,7 @@ export default function App() {
       pctStart={35}
       pctEnd={70}
       onFinish={() => guardarBloqueYContinuar(2, 'b3')}
-      onBack={() => go('b1', 'dass')}
+      onBack={() => setStep('b1')}
     />
   );
 
@@ -191,24 +184,24 @@ export default function App() {
       pctStart={70}
       pctEnd={100}
       onFinish={() => guardarBloqueYContinuar(3, 'results')}
-      onBack={() => go('dass', 'b3')}
+      onBack={() => setStep('dass')}
     />
   );
 
   if (step === 'results') return (
     <Results
       data={answers}
-      userData={userData}
       resultado={resultado}
-      onProfessionals={DEMO_MODE ? null : () => go('professionals', 'results')}
+      folio={folio}
+      onRegenerateCode={renovarCodigoVinculacion}
+      onProfessionals={() => setStep('professionals')}
       onExit={reset}
     />
   );
 
-  if (step === 'professionals' && !DEMO_MODE) return (
+  if (step === 'professionals') return (
     <ProfessionalSearch
-      userData={userData}
-      onBack={() => go('results', 'professionals')}
+      onBack={() => setStep('results')}
       onExit={reset}
     />
   );

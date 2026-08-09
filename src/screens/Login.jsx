@@ -2,24 +2,20 @@ import { useState, useRef, useEffect } from 'react';
 import logo from '../assets/SANEEG-LOGO.png';
 import { C } from '../constants/colors';
 import { ActionButton } from '../components/ActionButton';
-import { IconChevronLeft, IconEye, IconEyeOff, IconAlertTriangle } from '../components/Icons';
+import { IconChevronLeft, IconAlertTriangle } from '../components/Icons';
 
 export function Login({ onNext, onRegister }) {
   const [phone, setPhone]       = useState('');
-  const [pwd,   setPwd]         = useState('');
-  const [showPwd, setShowPwd]   = useState(false);
   const [error, setError]       = useState('');
   const phoneRef = useRef(null);
 
   useEffect(() => { phoneRef.current?.focus(); }, []);
 
   const phoneOk = /^\d{10}$/.test(phone.replace(/\s|-/g, ''));
-  const valid   = phoneOk && pwd.length >= 8;
+  const valid   = phoneOk;
 
   function handleNext() {
     if (!valid) return;
-    // TODO: connect to backend auth API
-    // For now simulate: any valid input proceeds
     onNext(phone.replace(/\s|-/g, ''));
   }
 
@@ -51,7 +47,7 @@ export function Login({ onNext, onRegister }) {
           <h1 style={{ fontSize: 26, fontWeight: 800, color: C.navy, letterSpacing: '-0.5px', marginBottom: 6 }}>
             Bienvenido de nuevo
           </h1>
-          <p style={{ fontSize: 15, color: '#374151' }}>Ingresa para continuar tu evaluación.</p>
+          <p style={{ fontSize: 15, color: '#374151' }}>Ingresa tu número, te mandaremos un código a tu correo.</p>
         </div>
 
         {error && (
@@ -68,7 +64,7 @@ export function Login({ onNext, onRegister }) {
           Número de teléfono
         </label>
         <div style={{
-          display: 'flex', alignItems: 'stretch', marginBottom: 16,
+          display: 'flex', alignItems: 'stretch', marginBottom: 28,
           border: `1.5px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', background: '#FFFFFF',
         }}>
           <span style={{
@@ -83,40 +79,9 @@ export function Login({ onNext, onRegister }) {
             placeholder="55 1234 5678"
             value={phone}
             onChange={e => { setPhone(e.target.value.replace(/\D/g, '').slice(0, 10)); setError(''); }}
+            onKeyDown={e => e.key === 'Enter' && handleNext()}
             style={{ ...inputStyle, flex: 1, border: 'none', borderRadius: 0 }}
           />
-        </div>
-
-        <label style={{ fontSize: 13, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>
-          Contraseña
-        </label>
-        <div style={{ position: 'relative', marginBottom: 8 }}>
-          <input
-            type={showPwd ? 'text' : 'password'}
-            placeholder="••••••••"
-            value={pwd}
-            onChange={e => { setPwd(e.target.value); setError(''); }}
-            onKeyDown={e => e.key === 'Enter' && handleNext()}
-            style={inputStyle}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPwd(v => !v)}
-            aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-            style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: C.muted }}
-          >
-            {showPwd ? <IconEyeOff size={18} /> : <IconEye size={18} />}
-          </button>
-        </div>
-
-        {/* Forgot password – placeholder for future backend */}
-        <div style={{ textAlign: 'right', marginBottom: 28 }}>
-          <span
-            onClick={() => setError('Funcionalidad disponible próximamente.')}
-            style={{ fontSize: 13, color: C.navy, fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: 2 }}
-          >
-            ¿Olvidaste tu contraseña?
-          </span>
         </div>
 
         <p style={{ textAlign: 'center', fontSize: 15, color: '#374151' }}>

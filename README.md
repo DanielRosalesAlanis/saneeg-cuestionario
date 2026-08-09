@@ -4,7 +4,7 @@
 
 **Evaluación de bienestar emocional para estudiantes**
 
-Cuestionario clínico (DASS-21) con registro por teléfono, resultados con líneas de apoyo y búsqueda de profesionales de salud mental.
+Cuestionario DASS-21 sin registro previo, resultados con líneas de apoyo y folio para vincular posteriormente una cita.
 
 ![React](https://img.shields.io/badge/React-19-002060?style=for-the-badge&logo=react&logoColor=00B4D8)
 ![Vite](https://img.shields.io/badge/Vite-8-002060?style=for-the-badge&logo=vite&logoColor=00B4D8)
@@ -15,19 +15,17 @@ Cuestionario clínico (DASS-21) con registro por teléfono, resultados con líne
 
 ## Sobre el proyecto
 
-SanEEG es el frontend de un proyecto de investigación (CENIDET) enfocado en neurología, psicología y salud mental estudiantil. Guía al usuario por un flujo completo — registro, consentimiento informado, cuestionario DASS-21, resultados y directorio de profesionales — con una interfaz mobile-first pensada para reducir fricción en un contexto sensible.
+SanEEG es el frontend de un proyecto de investigación (CENIDET) enfocado en neurología, psicología y salud mental estudiantil. Guía al participante por consentimiento informado, cuestionario DASS-21, resultados y generación de folio sin pedir una cuenta, nombre, teléfono, correo ni matrícula. La cuenta se creará posteriormente en la plataforma de citas cuando la persona decida vincular su evaluación.
 
 ## Flujo de la aplicación
 
 | Paso | Pantalla | Descripción |
 |---|---|---|
 | 1 | Bienvenida | Presentación breve antes de iniciar |
-| 2 | Registro / Inicio de sesión | Alta por número telefónico |
-| 3 | Verificación | Código de un solo uso vía WhatsApp |
-| 4 | Aviso de privacidad | Consentimiento informado (scroll obligatorio) |
-| 5 | Cuestionario | 3 bloques: datos personales, DASS-21 y contexto demográfico |
-| 6 | Resultados | Puntajes por severidad + líneas de apoyo en México |
-| 7 | Profesionales | Directorio de centros y citas disponibles |
+| 2 | Aviso de privacidad | Consentimiento informado y creación de una sesión anónima |
+| 3 | Cuestionario | 3 bloques sin identificadores directos: contexto general, DASS-21 y contexto demográfico |
+| 4 | Resultados | Puntajes por severidad, líneas de apoyo, folio y código privado |
+| 5 | Citas | Vinculación futura del folio con una cuenta y consumo de la API de citas |
 
 ## Tecnologías
 
@@ -46,7 +44,7 @@ npm run dev
 Abre `http://localhost:5173`. Las llamadas a `/api/*` se redirigen (ver
 `vite.config.js`) al backend Spring Boot en `http://localhost:8080` — necesitas
 tenerlo corriendo en paralelo (repo [saneeg-backend](https://github.com/DanielRosalesAlanis/saneeg-backend))
-para que el cuestionario y el panel de administrador funcionen completos.
+para guardar el cuestionario, calcular resultados y generar el folio.
 
 ## Scripts disponibles
 

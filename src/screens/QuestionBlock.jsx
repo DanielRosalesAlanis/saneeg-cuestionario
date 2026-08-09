@@ -4,6 +4,8 @@ import { Header } from '../components/Header';
 import { ActionButton } from '../components/ActionButton';
 import { OptionCard } from '../components/OptionCard';
 
+const EXCLUSIVE_MULTI_VALUES = new Set(['Ninguno', 'Prefiero no decirlo']);
+
 function ScaleQuestion({ question, value, onChange }) {
   const min = question.min ?? 1;
   const max = question.max ?? 5;
@@ -134,8 +136,15 @@ export function QuestionBlock({
   function setSingle(v) { setData({ [q.id]: v }); }
   function toggleMulti(v) {
     const cur = data[q.id] ?? [];
+    if (EXCLUSIVE_MULTI_VALUES.has(v)) {
+      setData({ [q.id]: cur.includes(v) ? [] : [v] });
+      return;
+    }
+    const compatibles = cur.filter(item => !EXCLUSIVE_MULTI_VALUES.has(item));
     setData({
-      [q.id]: cur.includes(v) ? cur.filter(x => x !== v) : [...cur, v],
+      [q.id]: compatibles.includes(v)
+        ? compatibles.filter(item => item !== v)
+        : [...compatibles, v],
     });
   }
 
@@ -158,9 +167,14 @@ export function QuestionBlock({
   }
 
   useEffect(() => {
-    setAtBottom(false);
-    if (needsScroll) requestAnimationFrame(checkScroll);
-  }, [idx]);
+    const frame = requestAnimationFrame(() => {
+      const el = listRef.current;
+      setAtBottom(Boolean(
+        needsScroll && el && el.scrollHeight - el.scrollTop - el.clientHeight < 8,
+      ));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [idx, needsScroll]);
 
   return (
     <div

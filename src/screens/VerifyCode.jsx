@@ -2,27 +2,43 @@ import { useState, useRef, useEffect } from 'react';
 import { C } from '../constants/colors';
 import { Header } from '../components/Header';
 import { ActionButton } from '../components/ActionButton';
-import { IconMessage, IconShield } from '../components/Icons';
+import { IconMessage, IconShield, IconAlertTriangle } from '../components/Icons';
 
 const OTP_LENGTH = 6;
 
-export function VerifyCode({ phone, onNext, onBack }) {
+export function VerifyCode({ onVerify, onResend, onBack }) {
   const [digits, setDigits] = useState(Array(OTP_LENGTH).fill(''));
   const [seconds, setSeconds] = useState(60);
-  const [canResend, setCanResend] = useState(false);
   const [sending, setSending] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [error, setError] = useState('');
   const refs = useRef([]);
 
   const valid = digits.every(d => d !== '');
+  const canResend = seconds <= 0;
 
   // Timer countdown
   useEffect(() => {
-    if (seconds <= 0) { setCanResend(true); return; }
+    if (seconds <= 0) return undefined;
     const t = setTimeout(() => setSeconds(s => s - 1), 1000);
     return () => clearTimeout(t);
   }, [seconds]);
 
   useEffect(() => { refs.current[0]?.focus(); }, []);
+
+  async function submit(codigo) {
+    setVerifying(true);
+    setError('');
+    try {
+      await onVerify(codigo);
+    } catch (err) {
+      setError(err.message || 'Código inválido o expirado');
+      setDigits(Array(OTP_LENGTH).fill(''));
+      refs.current[0]?.focus();
+    } finally {
+      setVerifying(false);
+    }
+  }
 
   function change(i, val) {
     const v = val.replace(/\D/g, '').slice(-1);
@@ -32,7 +48,7 @@ export function VerifyCode({ phone, onNext, onBack }) {
     if (v && i < OTP_LENGTH - 1) refs.current[i + 1]?.focus();
     // Auto-submit when all filled
     if (v && i === OTP_LENGTH - 1 && next.every(d => d !== '')) {
-      setTimeout(() => onNext(), 300);
+      submit(next.join(''));
     }
   }
 
@@ -47,25 +63,25 @@ export function VerifyCode({ phone, onNext, onBack }) {
     if (text.length === OTP_LENGTH) {
       setDigits(text.split(''));
       refs.current[OTP_LENGTH - 1]?.focus();
+      submit(text);
     }
   }
 
-  // TODO: integrate Twilio API to send OTP via SMS/WhatsApp
   async function resend() {
     if (!canResend) return;
     setSending(true);
-    // await twilioService.sendOTP(phone);
-    await new Promise(r => setTimeout(r, 800)); // simulate
-    setSending(false);
-    setCanResend(false);
-    setSeconds(60);
-    setDigits(Array(OTP_LENGTH).fill(''));
-    refs.current[0]?.focus();
+    setError('');
+    try {
+      await onResend();
+      setSeconds(60);
+      setDigits(Array(OTP_LENGTH).fill(''));
+      refs.current[0]?.focus();
+    } catch (err) {
+      setError(err.message || 'No se pudo reenviar el código');
+    } finally {
+      setSending(false);
+    }
   }
-
-  const maskedPhone = phone
-    ? `+52 *** *** ${phone.slice(-4)}`
-    : '';
 
   return (
     <div className="anim-fadeup" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -82,12 +98,21 @@ export function VerifyCode({ phone, onNext, onBack }) {
         </div>
 
         <h1 style={{ fontSize: 26, fontWeight: 800, color: C.navy, letterSpacing: '-0.5px', marginBottom: 8 }}>
-          Verifica tu número
+          Verifica tu correo
         </h1>
         <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.65, marginBottom: 36 }}>
-          Enviamos un código de {OTP_LENGTH} dígitos a tu WhatsApp{phone ? ` al número ${maskedPhone}` : ''}.
-          Ingrésalo para continuar.
+          Enviamos un código de {OTP_LENGTH} dígitos a tu correo. Ingrésalo para continuar.
         </p>
+
+        {error && (
+          <div style={{
+            padding: '12px 14px', borderRadius: 10, background: '#FEF2F2',
+            border: `1px solid ${C.error}33`, marginBottom: 20, display: 'flex', gap: 8, alignItems: 'flex-start',
+          }}>
+            <span style={{ color: C.error, display: 'flex', flexShrink: 0, marginTop: 1 }}><IconAlertTriangle size={16} /></span>
+            <p style={{ fontSize: 14, color: C.error }}>{error}</p>
+          </div>
+        )}
 
         {/* OTP boxes */}
         <div
@@ -102,6 +127,7 @@ export function VerifyCode({ phone, onNext, onBack }) {
               inputMode="numeric"
               maxLength={1}
               value={d}
+              disabled={verifying}
               onChange={e => change(i, e.target.value)}
               onKeyDown={e => keyDown(i, e)}
               style={{
@@ -155,7 +181,11 @@ export function VerifyCode({ phone, onNext, onBack }) {
         </div>
       </div>
 
-      <ActionButton label="Verificar" onClick={onNext} disabled={!valid} />
+      <ActionButton
+        label={verifying ? 'Verificando…' : 'Verificar'}
+        onClick={() => submit(digits.join(''))}
+        disabled={!valid || verifying}
+      />
     </div>
   );
 }

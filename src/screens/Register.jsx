@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import logo from '../assets/SANEEG-LOGO.png';
 import { C } from '../constants/colors';
 import { ActionButton } from '../components/ActionButton';
-import { IconChevronLeft, IconEye, IconEyeOff } from '../components/Icons';
+import { IconChevronLeft } from '../components/Icons';
 
 const INPUT_STYLE = {
   width: '100%',
@@ -17,27 +17,24 @@ const INPUT_STYLE = {
   marginBottom: 4,
 };
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function Register({ onNext, onLogin }) {
   const [phone, setPhone] = useState('');
-  const [pwd,   setPwd]   = useState('');
-  const [conf,  setConf]  = useState('');
-  const [showPwd,  setShowPwd]  = useState(false);
-  const [showConf, setShowConf] = useState(false);
+  const [email, setEmail] = useState('');
   const [touched,  setTouched]  = useState({});
   const phoneRef = useRef(null);
 
   useEffect(() => { phoneRef.current?.focus(); }, []);
 
   const phoneOk = /^\d{10}$/.test(phone.replace(/\s|-/g, ''));
-  const pwdOk   = pwd.length >= 8;
-  const confOk  = pwd === conf && conf.length > 0;
-  const valid   = phoneOk && pwdOk && confOk;
+  const emailOk = EMAIL_RE.test(email.trim());
+  const valid   = phoneOk && emailOk;
 
   const err = (field) => {
     if (!touched[field]) return null;
     if (field === 'phone' && !phoneOk)  return 'Ingresa un número de 10 dígitos';
-    if (field === 'pwd'   && !pwdOk)    return 'Mínimo 8 caracteres';
-    if (field === 'conf'  && !confOk)   return 'Las contraseñas no coinciden';
+    if (field === 'email' && !emailOk)  return 'Ingresa un correo válido';
     return null;
   };
 
@@ -47,7 +44,7 @@ export function Register({ onNext, onLogin }) {
   });
 
   function handleNext() {
-    if (valid) onNext(phone.replace(/\s|-/g, ''));
+    if (valid) onNext(phone.replace(/\s|-/g, ''), email.trim());
   }
 
   return (
@@ -67,7 +64,7 @@ export function Register({ onNext, onLogin }) {
             Crear tu cuenta
           </h1>
           <p style={{ fontSize: 15, color: '#374151' }}>
-            Ingresa tu número y crea una contraseña segura.
+            Ingresa tu número y tu correo — te mandaremos un código para verificarlo.
           </p>
         </div>
 
@@ -102,70 +99,22 @@ export function Register({ onNext, onLogin }) {
           )}
         </div>
 
-        {/* Password */}
+        {/* Email */}
         <label style={{ fontSize: 13, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>
-          Contraseña
+          Correo electrónico
         </label>
-        <div style={{ position: 'relative', marginBottom: 4 }}>
+        <div style={{ marginBottom: 4 }}>
           <input
-            type={showPwd ? 'text' : 'password'}
-            placeholder="Mínimo 8 caracteres"
-            value={pwd}
-            onChange={e => setPwd(e.target.value)}
-            onBlur={() => setTouched(t => ({ ...t, pwd: true }))}
-            style={fieldStyle('pwd')}
-          />
-          <button
-            type="button"
-            onClick={() => setShowPwd(v => !v)}
-            style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: C.muted }}
-            aria-label={showPwd ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-          >
-            {showPwd ? <IconEyeOff size={18} /> : <IconEye size={18} />}
-          </button>
-        </div>
-        {err('pwd') && <p style={{ color: C.error, fontSize: 12, marginBottom: 4 }}>{err('pwd')}</p>}
-
-        {/* Password strength bar */}
-        {pwd.length > 0 && (
-          <div style={{ marginBottom: 16, marginTop: 6 }}>
-            <div style={{ height: 4, borderRadius: 2, background: C.navyLight, overflow: 'hidden' }}>
-              <div style={{
-                height: '100%', borderRadius: 2, transition: 'width 0.3s, background 0.3s',
-                width: pwd.length < 6 ? '30%' : pwd.length < 10 ? '65%' : '100%',
-                background: pwd.length < 6 ? C.error : pwd.length < 10 ? C.warn : C.success,
-              }} />
-            </div>
-            <p style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
-              {pwd.length < 6 ? 'Débil' : pwd.length < 10 ? 'Aceptable' : 'Fuerte'}
-            </p>
-          </div>
-        )}
-
-        {/* Confirm */}
-        <label style={{ fontSize: 13, fontWeight: 600, color: C.muted, display: 'block', marginBottom: 6 }}>
-          Confirmar contraseña
-        </label>
-        <div style={{ position: 'relative', marginBottom: 4 }}>
-          <input
-            type={showConf ? 'text' : 'password'}
-            placeholder="Repite tu contraseña"
-            value={conf}
-            onChange={e => setConf(e.target.value)}
-            onBlur={() => setTouched(t => ({ ...t, conf: true }))}
+            type="email"
+            placeholder="tucorreo@ejemplo.com"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            onBlur={() => setTouched(t => ({ ...t, email: true }))}
             onKeyDown={e => e.key === 'Enter' && handleNext()}
-            style={fieldStyle('conf')}
+            style={fieldStyle('email')}
           />
-          <button
-            type="button"
-            onClick={() => setShowConf(v => !v)}
-            style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: C.muted }}
-            aria-label={showConf ? 'Ocultar' : 'Mostrar'}
-          >
-            {showConf ? <IconEyeOff size={18} /> : <IconEye size={18} />}
-          </button>
         </div>
-        {err('conf') && <p style={{ color: C.error, fontSize: 12, marginBottom: 4 }}>{err('conf')}</p>}
+        {err('email') && <p style={{ color: C.error, fontSize: 12, marginBottom: 4 }}>{err('email')}</p>}
 
         {/* Login link */}
         <p style={{ textAlign: 'center', marginTop: 28, fontSize: 15, color: '#374151' }}>

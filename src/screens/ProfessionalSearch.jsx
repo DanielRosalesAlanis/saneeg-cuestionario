@@ -1,429 +1,188 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { C } from '../constants/colors';
 import { Header } from '../components/Header';
-import { MOCK_CENTERS } from '../constants/mockData';
-import {
-  IconStar, IconSearch, IconMapPin, IconWalk, IconMessage,
-  IconInfo, IconCheckCircle, IconChevronDown, IconUser, IconStethoscope,
-} from '../components/Icons';
+import { listarSedes, listarTecnicos, obtenerDisponibilidad, listarCitas, solicitarCita, cancelarCita, reagendarCita } from '../api/citas';
 
-function StarRating({ rating }) {
-  const stars = [1, 2, 3, 4, 5];
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-      {stars.map(n => (
-        <IconStar key={n} size={13} filled={n <= Math.round(rating)} style={{ color: '#F59E0B' }} />
-      ))}
-      <span style={{ fontSize: 12, color: C.muted, marginLeft: 4 }}>{rating.toFixed(1)}</span>
-    </span>
-  );
-}
+const TIPOS = { consulta: 'Primera consulta', seguimiento: 'Seguimiento' };
 
-function SpecialtyPill({ label }) {
-  return (
-    <span style={{
-      display: 'inline-block', padding: '3px 10px', borderRadius: 20,
-      background: C.navyLight, color: C.navy,
-      fontSize: 12, fontWeight: 600, marginRight: 6, marginBottom: 4,
-    }}>
-      {label}
-    </span>
-  );
-}
+const ACTIVE = new Set(['SOLICITANDO', 'PENDIENTE', 'APROBADA', 'REAGENDA_REQUERIDA']);
+const STATUS = {
+  SOLICITANDO: 'Sincronizando solicitud', PENDIENTE: 'Pendiente de aprobación', APROBADA: 'Aprobada',
+  RECHAZADA: 'Rechazada', CANCELADA: 'Cancelada', REAGENDA_REQUERIDA: 'Debes reagendar',
+  ERROR_TEMPORAL: 'No pudo sincronizarse', COMPLETADA: 'Completada', NO_ASISTIO: 'No asistió',
+};
+const pad = value => String(value).padStart(2, '0');
+const isoDate = date => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+const addDays = days => { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + days); return isoDate(d); };
+const displayDate = value => new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }).format(new Date(`${value}T12:00:00`));
+const displayTime = value => String(value || '').slice(0, 5);
 
-function AppointmentModal({ center, doctor, slot, userData, onClose }) {
-  const [confirmed, setConfirmed] = useState(false);
+export function ProfessionalSearch({ aplicacionId, onBack, onExit, onLinkEvaluation, onNewEvaluation }) {
+  const [sedes, setSedes] = useState([]);
+  const [citas, setCitas] = useState([]);
+  const [idSede, setIdSede] = useState('');
+  const [slots, setSlots] = useState([]);
+  const [fecha, setFecha] = useState('');
+  const [hora, setHora] = useState('');
+  const [tipo, setTipo] = useState('consulta');
+  const [especialidades, setEspecialidades] = useState([]);
+  const [especialidad, setEspecialidad] = useState('');
+  const [reagenda, setReagenda] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  if (confirmed) return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(13,27,42,0.6)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 100, padding: 24,
-    }}>
-      <div className="anim-fadeup" style={{
-        background: C.white, borderRadius: 20, padding: 32, width: '100%', maxWidth: 420,
-        textAlign: 'center', boxShadow: '0 20px 60px rgba(13,27,42,0.25)',
-      }}>
-        <div style={{
-          width: 72, height: 72, borderRadius: '50%', background: '#ECFDF5', color: '#10B981',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          margin: '0 auto 20px',
-        }}><IconCheckCircle size={34} /></div>
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: C.navy, marginBottom: 8 }}>
-          ¡Cita confirmada!
-        </h2>
-        <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.65, marginBottom: 8 }}>
-          <strong style={{ color: C.navy }}>{slot}</strong> con{' '}
-          <strong style={{ color: C.navy }}>{doctor.name}</strong>
-        </p>
-        <p style={{ fontSize: 14, color: C.muted, marginBottom: 24 }}>
-          {center.name} — {center.address}
-        </p>
-        <p style={{ fontSize: 13, color: C.muted, marginBottom: 24 }}>
-          Recibirás un recordatorio por WhatsApp 24 horas antes de tu cita.
-        </p>
-        <div style={{ display: 'flex', justifyContent: 'center' }}>
-          <button
-            onClick={onClose}
-            style={{
-              width: '100%', maxWidth: 320, padding: '14px 40px', borderRadius: 9999,
-              background: C.teal, color: C.white, fontSize: 16, fontWeight: 700,
-              border: 'none', cursor: 'pointer',
-            }}
-          >
-            Aceptar
-          </button>
+  const current = citas.find(c => ACTIVE.has(c.estado));
+  const failedCurrentEvaluation = citas.some(c => c.aplicacionId === aplicacionId && c.estado === 'ERROR_TEMPORAL');
+  const usedCurrentEvaluation = citas.some(c => c.aplicacionId === aplicacionId && c.estado !== 'ERROR_TEMPORAL');
+  const canCreate = Boolean(aplicacionId) && !current && !usedCurrentEvaluation;
+  const dates = useMemo(() => [...new Set(slots.map(slot => slot.fecha))], [slots]);
+  const times = slots.filter(slot => slot.fecha === fecha);
+
+  useEffect(() => {
+    Promise.all([listarSedes(), listarCitas()])
+      .then(([siteData, appointmentData]) => { setSedes(siteData); setCitas(appointmentData); })
+      .catch(err => setError(err.message || 'No se pudo cargar la agenda.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function selectSite(value) {
+    setIdSede(value); setFecha(''); setHora(''); setSlots([]); setEspecialidad(''); setEspecialidades([]); setError('');
+    if (!value) return;
+    try {
+      const [tecnicos, disponibilidad] = await Promise.all([
+        listarTecnicos(value),
+        obtenerDisponibilidad(value, addDays(0), addDays(30)),
+      ]);
+      setEspecialidades([...new Set(tecnicos.map(t => t.especialidad).filter(Boolean))]);
+      setSlots(disponibilidad);
+    } catch (err) { setError(err.message || 'No se pudo consultar la disponibilidad.'); }
+  }
+
+  async function selectEspecialidad(value) {
+    setEspecialidad(value); setFecha(''); setHora(''); setError('');
+    if (!idSede) return;
+    try { setSlots(await obtenerDisponibilidad(idSede, addDays(0), addDays(30), value)); }
+    catch (err) { setError(err.message || 'No se pudo consultar la disponibilidad.'); }
+  }
+
+  async function save() {
+    if (!idSede || !fecha || !hora || saving) return;
+    setSaving(true); setError('');
+    try {
+      const payload = { idSede: Number(idSede), fecha, hora };
+      const updated = reagenda
+        ? await reagendarCita(reagenda.idCita, payload)
+        : await solicitarCita({ ...payload, aplicacionId, tipo, especialidad: especialidad || null });
+      setCitas(previous => [updated, ...previous.filter(item => item.idCita !== updated.idCita)]);
+      setReagenda(null); setIdSede(''); setFecha(''); setHora(''); setSlots([]);
+      setTipo('consulta'); setEspecialidad(''); setEspecialidades([]);
+    } catch (err) {
+      setError(err.message || 'No se pudo guardar la cita.');
+      // Si el error fue un conflicto (409), es posible que la cita en
+      // realidad sí se haya creado del lado del servidor (p. ej. dos
+      // solicitudes casi simultáneas) y lo que falló fue esta respuesta en
+      // particular. Refrescamos para que la pantalla refleje lo que
+      // realmente quedó guardado, en vez de dejar al usuario reintentando
+      // a ciegas contra algo que ya existe.
+      if (err.status === 409) {
+        try { setCitas(await listarCitas()); } catch { /* la lista se queda como estaba */ }
+      }
+    }
+    finally { setSaving(false); }
+  }
+
+  async function cancel(cita) {
+    if (!window.confirm('¿Deseas cancelar esta cita? El folio ya no podrá utilizarse para solicitar otra.')) return;
+    setSaving(true); setError('');
+    try {
+      const updated = await cancelarCita(cita.idCita);
+      setCitas(previous => previous.map(item => item.idCita === updated.idCita ? updated : item));
+      setReagenda(null);
+    } catch (err) { setError(err.message || 'No se pudo cancelar la cita.'); }
+    finally { setSaving(false); }
+  }
+
+  function beginReschedule(cita) {
+    setReagenda(cita); setIdSede(String(cita.idSede)); setFecha(''); setHora('');
+    selectSite(String(cita.idSede));
+  }
+
+  if (loading) return <div style={{ padding: 32, color: C.navy }}>Cargando agenda…</div>;
+
+  return <div className="anim-fadeup" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <Header onBack={onBack} />
+    <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+      <h1 style={{ color: C.navy, fontSize: 25, marginBottom: 6 }}>Agenda tu estudio</h1>
+      <p style={{ color: C.muted, lineHeight: 1.55, marginBottom: 20 }}>
+        Elige sede y horario. La cita dura 60 minutos y quedará pendiente hasta que un técnico la apruebe.
+      </p>
+
+      {error && <div style={{ padding: 13, borderRadius: 10, color: C.error, background: '#FEF2F2', marginBottom: 18 }}>{error}</div>}
+
+      {current && !reagenda && <div style={{ border: `1.5px solid ${current.estado === 'REAGENDA_REQUERIDA' ? '#F59E0B' : C.teal}`, borderRadius: 14, padding: 18, marginBottom: 22 }}>
+        <p style={{ fontSize: 12, fontWeight: 800, color: C.muted }}>CITA ACTUAL</p>
+        <h2 style={{ color: C.navy, fontSize: 19, margin: '5px 0' }}>{current.sedeNombre}</h2>
+        <p style={{ color: '#374151' }}>{displayDate(current.fecha)}, {displayTime(current.hora)}–{displayTime(current.horaFin)}</p>
+        <p style={{ color: current.estado === 'REAGENDA_REQUERIDA' ? '#B45309' : C.teal, fontWeight: 800, marginTop: 8 }}>{STATUS[current.estado] || current.estado}</p>
+        {current.motivoReagenda && <p style={{ color: C.muted, marginTop: 6 }}>{current.motivoReagenda}</p>}
+        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+          <button disabled={saving} onClick={() => beginReschedule(current)} style={{ flex: 1, padding: 11, borderRadius: 9, border: 0, background: C.navy, color: '#fff', fontWeight: 700 }}>Reagendar</button>
+          <button disabled={saving} onClick={() => cancel(current)} style={{ flex: 1, padding: 11, borderRadius: 9, border: `1px solid ${C.error}`, background: '#fff', color: C.error, fontWeight: 700 }}>Cancelar</button>
         </div>
-      </div>
-    </div>
-  );
+      </div>}
 
-  return (
-    <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(13,27,42,0.55)',
-      display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-      zIndex: 100, padding: '0',
-    }}
-    onClick={onClose}
-    >
-      <div
-        className="anim-fadeup"
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: C.white, borderRadius: '20px 20px 0 0', padding: '28px 24px 40px',
-          width: '100%', maxWidth: 480, boxShadow: '0 -10px 40px rgba(13,27,42,0.18)',
-        }}
-      >
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border, margin: '0 auto 20px' }} />
-        <h2 style={{ fontSize: 20, fontWeight: 800, color: C.navy, marginBottom: 4 }}>Confirmar cita</h2>
-        <p style={{ fontSize: 14, color: C.muted, marginBottom: 20 }}>
-          Verifica los datos antes de confirmar tu cita.
-        </p>
-
-        {[
-          ['Centro',     center.name],
-          ['Doctor',     doctor.name],
-          ['Especialidad', doctor.specialty],
-          ['Horario',    slot],
-          ['Dirección',  center.address],
-        ].map(([label, val]) => (
-          <div key={label} style={{
-            display: 'flex', justifyContent: 'space-between', gap: 12,
-            padding: '10px 0', borderBottom: `1px solid ${C.navyLight}`,
-          }}>
-            <span style={{ fontSize: 13, color: C.muted, fontWeight: 600, minWidth: 90 }}>{label}</span>
-            <span style={{ fontSize: 14, color: C.navy, fontWeight: 500, textAlign: 'right', flex: 1 }}>{val}</span>
+      {(canCreate || reagenda) && <section>
+        {failedCurrentEvaluation && !reagenda && <div style={{ padding: 12, borderRadius: 10, background: '#FFF7ED', color: '#9A3412', marginBottom: 16 }}>
+          La solicitud anterior no pudo sincronizarse. Puedes elegir el horario nuevamente; el folio no se duplicará.
+        </div>}
+        {reagenda && <div style={{ padding: 12, borderRadius: 10, background: C.navyLight, marginBottom: 16, color: C.navy }}>
+          Elige el nuevo horario. La modificación volverá a quedar pendiente de aprobación.
+        </div>}
+        <label style={{ display: 'block', fontSize: 13, fontWeight: 800, color: C.muted, marginBottom: 14 }}>Sede
+          <select value={idSede} onChange={e => selectSite(e.target.value)} style={{ display: 'block', width: '100%', marginTop: 6, padding: 13, borderRadius: 10, border: `1.5px solid ${C.border}` }}>
+            <option value="">Selecciona una sede</option>
+            {sedes.map(sede => <option key={sede.idSede} value={sede.idSede}>{sede.nombre}</option>)}
+          </select>
+        </label>
+        {!reagenda && <label style={{ display: 'block', fontSize: 13, fontWeight: 800, color: C.muted, marginBottom: 14 }}>Tipo de cita
+          <select value={tipo} onChange={e => setTipo(e.target.value)} style={{ display: 'block', width: '100%', marginTop: 6, padding: 13, borderRadius: 10, border: `1.5px solid ${C.border}` }}>
+            {Object.entries(TIPOS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>}
+        {idSede && especialidades.length > 0 && <label style={{ display: 'block', fontSize: 13, fontWeight: 800, color: C.muted, marginBottom: 14 }}>Especialidad
+          <select value={especialidad} onChange={e => selectEspecialidad(e.target.value)} style={{ display: 'block', width: '100%', marginTop: 6, padding: 13, borderRadius: 10, border: `1.5px solid ${C.border}` }}>
+            <option value="">Cualquier especialidad</option>
+            {especialidades.map(item => <option key={item} value={item}>{item}</option>)}
+          </select>
+        </label>}
+        {idSede && slots.length === 0 && !error && <p style={{ color: C.muted, margin: '18px 0' }}>No hay horarios disponibles dentro de los próximos 30 días.</p>}
+        {dates.length > 0 && <label style={{ display: 'block', fontSize: 13, fontWeight: 800, color: C.muted, marginBottom: 14 }}>Fecha
+          <select value={fecha} onChange={e => { setFecha(e.target.value); setHora(''); }} style={{ display: 'block', width: '100%', marginTop: 6, padding: 13, borderRadius: 10, border: `1.5px solid ${C.border}` }}>
+            <option value="">Selecciona una fecha</option>
+            {dates.map(date => <option key={date} value={date}>{displayDate(date)}</option>)}
+          </select>
+        </label>}
+        {fecha && <div style={{ marginTop: 18 }}>
+          <p style={{ fontSize: 13, fontWeight: 800, color: C.muted, marginBottom: 9 }}>Horario</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 9 }}>
+            {times.map(slot => <button key={`${slot.fecha}-${slot.horaInicio}`} onClick={() => setHora(slot.horaInicio)} style={{ padding: 11, borderRadius: 9, border: `1.5px solid ${hora === slot.horaInicio ? C.navy : C.border}`, background: hora === slot.horaInicio ? C.navyLight : '#fff', color: C.navy, fontWeight: 700 }}>{displayTime(slot.horaInicio)}</button>)}
           </div>
-        ))}
-
-        {userData?.phone && (
-          <div style={{
-            marginTop: 16, padding: '12px 14px', borderRadius: 10, background: C.tealLight,
-            display: 'flex', gap: 8, alignItems: 'flex-start',
-          }}>
-            <span style={{ display: 'flex', color: C.tealDark, marginTop: 1 }}><IconMessage size={15} /></span>
-            <p style={{ fontSize: 13, color: C.navy }}>
-              Recibirás la confirmación al +52 *** *** {userData.phone.slice(-4)}
-            </p>
-          </div>
-        )}
-
-        <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-          <button
-            onClick={() => setConfirmed(true)}
-            style={{
-              width: '100%', maxWidth: 320, padding: '16px 40px', borderRadius: 9999,
-              background: C.teal, color: C.white, fontSize: 16, fontWeight: 700,
-              border: 'none', cursor: 'pointer',
-            }}
-          >
-            Confirmar cita
-          </button>
-          <button
-            onClick={onClose}
-            style={{
-              width: '100%', maxWidth: 320, padding: '14px 40px', borderRadius: 9999,
-              background: 'transparent', color: C.muted, fontSize: 15, fontWeight: 600,
-              border: `1.5px solid ${C.border}`, cursor: 'pointer',
-            }}
-          >
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DoctorCard({ doctor, center, userData }) {
-  const [expanded, setExpanded] = useState(false);
-  const [appointment, setAppointment] = useState(null);
-
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div
-        onClick={() => setExpanded(v => !v)}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 12,
-          padding: '14px 16px', borderRadius: 12,
-          background: expanded ? C.navyLight : C.surface,
-          border: `1.5px solid ${expanded ? C.navy : C.border}`,
-          cursor: 'pointer', transition: 'all 0.2s',
-        }}
-      >
-        <div style={{
-          width: 40, height: 40, borderRadius: '50%',
-          background: expanded ? C.navy : C.navyLight,
-          color: expanded ? C.white : C.navy,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0, transition: 'all 0.2s',
-        }}>
-          <IconUser size={18} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{doctor.name}</p>
-          <p style={{ fontSize: 13, color: C.muted }}>{doctor.specialty}</p>
-        </div>
-        <span style={{ color: C.navy, display: 'flex', transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'none' }}>
-          <IconChevronDown size={18} />
-        </span>
-      </div>
-
-      {expanded && (
-        <div className="anim-fadein" style={{
-          padding: '14px 16px 16px',
-          borderRadius: '0 0 12px 12px',
-          border: `1.5px solid ${C.navy}`,
-          borderTop: 'none',
-          background: C.white,
-        }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: C.muted, marginBottom: 10 }}>
-            Horarios disponibles esta semana:
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {doctor.slots.map((slot, i) => (
-              <button
-                key={i}
-                onClick={() => setAppointment({ slot })}
-                style={{
-                  padding: '8px 14px', borderRadius: 10,
-                  background: C.teal, color: C.white,
-                  fontSize: 13, fontWeight: 600,
-                  border: 'none', cursor: 'pointer',
-                }}
-              >
-                {slot}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {appointment && (
-        <AppointmentModal
-          center={center}
-          doctor={doctor}
-          slot={appointment.slot}
-          userData={userData}
-          onClose={() => setAppointment(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function CenterCard({ center, userData }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div style={{
-      borderRadius: 16,
-      border: `1.5px solid ${C.border}`,
-      background: C.white,
-      marginBottom: 16,
-      overflow: 'hidden',
-    }}>
-      {/* Center header */}
-      <div
-        onClick={() => setExpanded(v => !v)}
-        style={{ padding: '18px 18px 14px', cursor: 'pointer' }}
-      >
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 10 }}>
-          <div style={{
-            width: 48, height: 48, borderRadius: 12,
-            background: C.navyLight, color: C.navy, display: 'flex',
-            alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <IconStethoscope size={22} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2, flexWrap: 'wrap' }}>
-              <p style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{center.name}</p>
-              {center.badge && (
-                <span style={{
-                  padding: '2px 8px', borderRadius: 20,
-                  background: center.badge === 'Gratuito' ? '#ECFDF5' : C.tealLight,
-                  color: center.badge === 'Gratuito' ? '#065F46' : C.tealDark,
-                  fontSize: 11, fontWeight: 700,
-                }}>
-                  {center.badge}
-                </span>
-              )}
-            </div>
-            <StarRating rating={center.rating} />
-          </div>
-        </div>
-
-        <p style={{ fontSize: 13, color: C.muted, marginBottom: 6, lineHeight: 1.45, display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-          <IconMapPin size={14} style={{ flexShrink: 0, marginTop: 2 }} />
-          {center.address}
-        </p>
-        <p style={{ fontSize: 12, color: C.teal, fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <IconWalk size={14} />
-          {center.distance}
-        </p>
-
-        <div style={{ marginBottom: 4 }}>
-          {center.specialty.map(s => <SpecialtyPill key={s} label={s} />)}
-        </div>
-
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
-          <span style={{ fontSize: 13, color: C.muted }}>
-            {center.doctors.length} doctor{center.doctors.length !== 1 ? 'es' : ''} disponibles
-          </span>
-          <span style={{
-            fontSize: 13, fontWeight: 700, color: expanded ? C.navy : C.teal,
-            display: 'flex', alignItems: 'center', gap: 4,
-          }}>
-            {expanded ? 'Cerrar' : 'Ver doctores'}
-            <span style={{ display: 'flex', transition: 'transform 0.2s', transform: expanded ? 'rotate(180deg)' : 'none' }}>
-              <IconChevronDown size={14} />
-            </span>
-          </span>
-        </div>
-      </div>
-
-      {/* Doctors list */}
-      {expanded && (
-        <div className="anim-fadein" style={{
-          padding: '0 16px 16px',
-          borderTop: `1px solid ${C.navyLight}`,
-          paddingTop: 14,
-        }}>
-          {center.doctors.map(doc => (
-            <DoctorCard key={doc.id} doctor={doc} center={center} userData={userData} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function ProfessionalSearch({ userData, onBack, onExit }) {
-  const [query, setQuery] = useState('');
-  const [filterSpecialty, setFilterSpecialty] = useState('Todos');
-
-  const allSpecialties = ['Todos', ...new Set(MOCK_CENTERS.flatMap(c => c.specialty))];
-
-  const filtered = MOCK_CENTERS.filter(c => {
-    const matchQuery = !query || c.name.toLowerCase().includes(query.toLowerCase());
-    const matchSpec  = filterSpecialty === 'Todos' || c.specialty.includes(filterSpecialty);
-    return matchQuery && matchSpec;
-  });
-
-  return (
-    <div className="anim-fadeup" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <Header onBack={onBack} />
-
-      {/* Fixed search + filters zone */}
-      <div style={{ flexShrink: 0, padding: '16px 24px 0', background: C.white }}>
-        <h1 style={{ fontSize: 21, fontWeight: 800, color: C.navy, marginBottom: 14, letterSpacing: '-0.5px' }}>
-          Buscar profesionales
-        </h1>
-
-        <div style={{ position: 'relative', marginBottom: 14 }}>
-          <span style={{
-            position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-            color: C.muted, display: 'flex', pointerEvents: 'none',
-          }}><IconSearch size={17} /></span>
-          <input
-            type="search"
-            placeholder="Buscar por nombre o dirección…"
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-            style={{
-              width: '100%', padding: '13px 16px 13px 42px',
-              borderRadius: 10, border: `1.5px solid ${C.border}`,
-              fontSize: 15, color: C.text, outline: 'none',
-              background: C.surface, transition: 'border-color 0.2s',
-            }}
-            onFocus={e => (e.target.style.borderColor = C.teal)}
-            onBlur={e => (e.target.style.borderColor = C.border)}
-          />
-        </div>
-
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 14 }}>
-          {allSpecialties.map(spec => (
-            <button
-              key={spec}
-              onClick={() => setFilterSpecialty(spec)}
-              style={{
-                padding: '6px 14px', borderRadius: 20, flexShrink: 0,
-                fontSize: 13, fontWeight: 600,
-                background: filterSpecialty === spec ? C.navy : C.navyLight,
-                color: filterSpecialty === spec ? C.white : C.navy,
-                border: 'none', cursor: 'pointer', transition: 'all 0.15s',
-              }}
-            >
-              {spec}
-            </button>
-          ))}
-        </div>
-
-        <div style={{
-          padding: '10px 12px', borderRadius: 10, background: '#FFF7ED',
-          border: '1px solid #F59E0B44', marginBottom: 12,
-          display: 'flex', gap: 8, alignItems: 'flex-start',
-        }}>
-          <span style={{ display: 'flex', color: '#92400E', marginTop: 1, flexShrink: 0 }}><IconInfo size={15} /></span>
-          <p style={{ fontSize: 12, color: '#92400E', lineHeight: 1.45 }}>
-            Datos de ejemplo. Los centros y horarios reales se mostrarán al conectar con el sistema.
-          </p>
-        </div>
-      </div>
-
-      {/* Scrollable results zone */}
-      <div style={{ flex: 1, minHeight: 0, padding: '0 24px', overflowY: 'auto' }}>
-        {filtered.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: C.muted }}>
-            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-              <IconSearch size={32} />
-            </div>
-            <p style={{ fontSize: 16, fontWeight: 600 }}>Sin resultados</p>
-            <p style={{ fontSize: 14, marginTop: 4 }}>Intenta con otros filtros.</p>
-          </div>
-        ) : (
-          filtered.map(center => (
-            <CenterCard key={center.id} center={center} userData={userData} />
-          ))
-        )}
-        <div style={{ height: 8 }} />
-      </div>
-
-      {/* Exit button */}
-      <div style={{ flexShrink: 0, paddingTop: 12, paddingBottom: 24, background: C.white, borderTop: `1px solid ${C.navyLight}`, display: 'flex', justifyContent: 'center' }}>
-        <button
-          onClick={onExit}
-          style={{
-            width: '100%', maxWidth: 320, padding: '14px 40px', borderRadius: 9999,
-            background: 'transparent', color: C.muted,
-            fontSize: 15, fontWeight: 600,
-            border: `1.5px solid ${C.border}`, cursor: 'pointer',
-          }}
-        >
-          Salir del test
+        </div>}
+        <button disabled={!idSede || !fecha || !hora || saving} onClick={save} style={{ width: '100%', marginTop: 24, padding: 14, borderRadius: 999, border: 0, background: C.teal, color: '#fff', fontWeight: 800, opacity: !idSede || !fecha || !hora || saving ? .45 : 1 }}>
+          {saving ? 'Guardando…' : reagenda ? 'Solicitar reagenda' : 'Solicitar cita'}
         </button>
-      </div>
+        {reagenda && <button onClick={() => setReagenda(null)} style={{ width: '100%', padding: 12, border: 0, background: 'none', color: C.muted }}>Conservar cita actual</button>}
+      </section>}
+
+      {!current && usedCurrentEvaluation && <div style={{ marginTop: 22, padding: 14, borderRadius: 10, background: C.surface, color: C.muted, lineHeight: 1.5 }}>
+        Tu folio anterior ya fue utilizado. Para solicitar otra cita, completa nuevamente el cuestionario y vincula el nuevo folio.
+        <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
+          {onNewEvaluation && <button onClick={onNewEvaluation} style={{ flex: 1, padding: 10, borderRadius: 9, border: 0, background: C.navy, color: '#fff', fontWeight: 700 }}>Nuevo cuestionario</button>}
+          {onLinkEvaluation && <button onClick={onLinkEvaluation} style={{ flex: 1, padding: 10, borderRadius: 9, border: `1px solid ${C.navy}`, background: '#fff', color: C.navy, fontWeight: 700 }}>Vincular folio</button>}
+        </div>
+      </div>}
+      <button onClick={onExit} style={{ width: '100%', marginTop: 24, padding: 12, border: 0, background: 'none', color: C.muted, textDecoration: 'underline', cursor: 'pointer' }}>Cerrar sesión</button>
     </div>
-  );
+  </div>;
 }

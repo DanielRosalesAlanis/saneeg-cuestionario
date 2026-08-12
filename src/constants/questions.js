@@ -18,6 +18,8 @@ export const B1 = [
     type: 'text',
     ph: 'Ej. 20',
     inputMode: 'numeric',
+    min: 10,
+    max: 100,
   },
   {
     id: 'b1_7',
@@ -29,7 +31,9 @@ export const B1 = [
     id: 'b1_8',
     text: '¿En qué escuela estás inscrito(a)?',
     type: 'text',
-    ph: 'Nombre de la institución',
+    ph: 'Nombre de la institución (mín. 2 caracteres)',
+    minLength: 2,
+    maxLength: 150,
   },
   {
     id: 'b1_10',

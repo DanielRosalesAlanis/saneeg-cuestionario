@@ -1,6 +1,7 @@
 import logo from '../assets/SANEEG-LOGO.png';
 import { C } from '../constants/colors';
 import { useEnterKey } from '../hooks/useEnterKey';
+import { Link } from 'react-router-dom';
 
 export function Welcome({ onNext }) {
   useEnterKey(onNext, false);
@@ -44,8 +45,7 @@ export function Welcome({ onNext }) {
           lineHeight: 1.75,
           maxWidth: 300,
         }}>
-          Puedes contestar sin crear una cuenta ni proporcionar nombre, teléfono o correo.
-          Tus resultados te ayudarán a conocer tu estado emocional actual y al finalizar
+          Tus resultados te ayudarán a conocer tu estado emocional actual, al finalizar
           recibirás un folio para solicitar una cita si así lo deseas.
         </p>
       </div>
@@ -70,6 +70,15 @@ export function Welcome({ onNext }) {
         >
           Iniciar test
         </button>
+        <Link
+          to="/citas"
+          style={{
+            marginTop: 16, color: C.navy, fontSize: 14, fontWeight: 700,
+            textDecoration: 'underline', textUnderlineOffset: 3,
+          }}
+        >
+          ¿Ya tienes una cita? Consultar citas
+        </Link>
       </div>
     </div>
   );

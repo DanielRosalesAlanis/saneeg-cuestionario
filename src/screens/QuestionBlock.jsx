@@ -6,6 +6,24 @@ import { OptionCard } from '../components/OptionCard';
 
 const EXCLUSIVE_MULTI_VALUES = new Set(['Ninguno', 'Prefiero no decirlo']);
 
+// El backend valida los mismos límites (BloqueValidator); replicarlos aquí
+// evita que el usuario llegue hasta el guardado del bloque para enterarse
+// de que su respuesta es inválida.
+function isValidTextAnswer(question, val) {
+  if (val === undefined || val === null || val === '') return false;
+  const text = String(val).trim();
+  if (question.inputMode === 'numeric') {
+    if (!/^\d{1,3}$/.test(text)) return false;
+    const n = Number(text);
+    if (question.min !== undefined && n < question.min) return false;
+    if (question.max !== undefined && n > question.max) return false;
+    return true;
+  }
+  if (question.minLength !== undefined && text.length < question.minLength) return false;
+  if (question.maxLength !== undefined && text.length > question.maxLength) return false;
+  return true;
+}
+
 function ScaleQuestion({ question, value, onChange }) {
   const min = question.min ?? 1;
   const max = question.max ?? 5;
@@ -129,8 +147,9 @@ export function QuestionBlock({
   const progress = pctStart + (idx / questions.length) * (pctEnd - pctStart);
 
   const isAnswered =
-    q.type === 'multi'   ? val && val.length > 0 :
-    q.type === 'slider'  ? val !== undefined :
+    q.type === 'multi' ? val && val.length > 0 :
+    q.type === 'slider' ? val !== undefined :
+    q.type === 'text' ? isValidTextAnswer(q, val) :
     val !== undefined && val !== '';
 
   function setSingle(v) { setData({ [q.id]: v }); }
@@ -283,6 +302,13 @@ export function QuestionBlock({
         {q.type === 'text' && (
           <div style={{ overflowY: 'auto', minHeight: 0 }}>
             <TextQuestion question={q} value={val} onChange={setSingle} />
+            {val !== undefined && val !== '' && !isValidTextAnswer(q, val) && (
+              <p style={{ fontSize: 13, color: C.error, marginTop: 8 }}>
+                {q.inputMode === 'numeric'
+                  ? `Ingresa un número entre ${q.min ?? 0} y ${q.max ?? 999}.`
+                  : `Escribe al menos ${q.minLength} caracteres.`}
+              </p>
+            )}
           </div>
         )}
 

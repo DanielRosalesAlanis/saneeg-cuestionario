@@ -6,13 +6,15 @@ import { IconMessage, IconShield, IconAlertTriangle } from '../components/Icons'
 
 const OTP_LENGTH = 6;
 
-export function VerifyCode({ onVerify, onResend, onBack }) {
+export function VerifyCode({ destino, onVerify, onResend, onBack }) {
   const [digits, setDigits] = useState(Array(OTP_LENGTH).fill(''));
   const [seconds, setSeconds] = useState(60);
   const [sending, setSending] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
   const refs = useRef([]);
+  const verifyingRef = useRef(false);
+  const sendingRef = useRef(false);
 
   const valid = digits.every(d => d !== '');
   const canResend = seconds <= 0;
@@ -27,6 +29,8 @@ export function VerifyCode({ onVerify, onResend, onBack }) {
   useEffect(() => { refs.current[0]?.focus(); }, []);
 
   async function submit(codigo) {
+    if (verifyingRef.current || !/^\d{6}$/.test(codigo)) return;
+    verifyingRef.current = true;
     setVerifying(true);
     setError('');
     try {
@@ -36,6 +40,7 @@ export function VerifyCode({ onVerify, onResend, onBack }) {
       setDigits(Array(OTP_LENGTH).fill(''));
       refs.current[0]?.focus();
     } finally {
+      verifyingRef.current = false;
       setVerifying(false);
     }
   }
@@ -46,10 +51,6 @@ export function VerifyCode({ onVerify, onResend, onBack }) {
     next[i] = v;
     setDigits(next);
     if (v && i < OTP_LENGTH - 1) refs.current[i + 1]?.focus();
-    // Auto-submit when all filled
-    if (v && i === OTP_LENGTH - 1 && next.every(d => d !== '')) {
-      submit(next.join(''));
-    }
   }
 
   function keyDown(i, e) {
@@ -61,14 +62,15 @@ export function VerifyCode({ onVerify, onResend, onBack }) {
   function paste(e) {
     const text = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH);
     if (text.length === OTP_LENGTH) {
+      e.preventDefault();
       setDigits(text.split(''));
       refs.current[OTP_LENGTH - 1]?.focus();
-      submit(text);
     }
   }
 
   async function resend() {
-    if (!canResend) return;
+    if (!canResend || sendingRef.current || verifyingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
     setError('');
     try {
@@ -79,6 +81,7 @@ export function VerifyCode({ onVerify, onResend, onBack }) {
     } catch (err) {
       setError(err.message || 'No se pudo reenviar el código');
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   }
@@ -101,7 +104,7 @@ export function VerifyCode({ onVerify, onResend, onBack }) {
           Verifica tu correo
         </h1>
         <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.65, marginBottom: 36 }}>
-          Enviamos un código de {OTP_LENGTH} dígitos a tu correo. Ingrésalo para continuar.
+          Enviamos un código de {OTP_LENGTH} dígitos a {destino || 'tu correo'}. Ingrésalo para continuar.
         </p>
 
         {error && (
@@ -125,6 +128,7 @@ export function VerifyCode({ onVerify, onResend, onBack }) {
               ref={el => (refs.current[i] = el)}
               type="text"
               inputMode="numeric"
+              autoComplete={i === 0 ? 'one-time-code' : 'off'}
               maxLength={1}
               value={d}
               disabled={verifying}

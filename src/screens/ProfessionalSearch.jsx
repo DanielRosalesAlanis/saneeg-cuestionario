@@ -169,7 +169,7 @@ export function ProfessionalSearch({ aplicacionId, onBack, onExit, onLinkEvaluat
             {times.map(slot => <button key={`${slot.fecha}-${slot.horaInicio}`} onClick={() => setHora(slot.horaInicio)} style={{ padding: 11, borderRadius: 9, border: `1.5px solid ${hora === slot.horaInicio ? C.navy : C.border}`, background: hora === slot.horaInicio ? C.navyLight : '#fff', color: C.navy, fontWeight: 700 }}>{displayTime(slot.horaInicio)}</button>)}
           </div>
         </div>}
-        <button disabled={!idSede || !fecha || !hora || saving} onClick={save} style={{ width: '100%', marginTop: 24, padding: 14, borderRadius: 999, border: 0, background: C.teal, color: '#fff', fontWeight: 800, opacity: !idSede || !fecha || !hora || saving ? .45 : 1 }}>
+        <button disabled={!idSede || !fecha || !hora || saving} onClick={save} style={{ width: '100%', marginTop: 24, padding: 14, borderRadius: 999, border: 0, background: C.teal, color: C.navy, fontWeight: 800, opacity: !idSede || !fecha || !hora || saving ? .45 : 1 }}>
           {saving ? 'Guardando…' : reagenda ? 'Solicitar reagenda' : 'Solicitar cita'}
         </button>
         {reagenda && <button onClick={() => setReagenda(null)} style={{ width: '100%', padding: 12, border: 0, background: 'none', color: C.muted }}>Conservar cita actual</button>}

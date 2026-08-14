@@ -60,7 +60,7 @@ export function Welcome({ onNext }) {
             padding: '16px 40px',
             borderRadius: 9999,
             background: C.teal,
-            color: '#FFFFFF',
+            color: C.navy,
             fontSize: 16,
             fontWeight: 700,
             border: 'none',

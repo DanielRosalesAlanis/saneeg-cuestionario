@@ -299,7 +299,7 @@ export function Results({ data, resultado, folio, onRegenerateCode, onProfession
               onClick={onProfessionals}
               style={{
                 width: '100%', maxWidth: 320, padding: '16px 40px', borderRadius: 9999,
-                background: C.teal, color: C.white,
+                background: C.teal, color: C.navy,
                 fontSize: 16, fontWeight: 700, border: 'none',
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,

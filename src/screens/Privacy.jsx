@@ -88,6 +88,8 @@ export function Privacy({ onNext, onBack }) {
           ref={scrollRef}
           onScroll={checkBottom}
           className="scroll-box"
+          tabIndex={0}
+          aria-label="Contenido del aviso de privacidad"
           style={{
             flex: 1,
             overflowY: 'auto',

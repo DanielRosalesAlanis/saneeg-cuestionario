@@ -17,7 +17,8 @@ export function ActionButton({
 
   const textColor =
     disabled              ? '#9CA3AF' :
-    variant === 'outline' ? C.navy    : '#FFFFFF';
+    variant === 'outline' ? C.navy    :
+    variant === 'teal'    ? C.navy    : '#FFFFFF';
 
   return (
     <div

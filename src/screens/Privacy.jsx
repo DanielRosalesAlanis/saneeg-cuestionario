@@ -166,7 +166,7 @@ export function Privacy({ onNext, onBack }) {
 
             <div>
               <p style={{ fontSize: 14, fontWeight: 700, color: C.navy, marginBottom: 2 }}>
-                Doy mi consentimiento expreso
+                Doy mi consentimiento expreso*
               </p>
               <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.55 }}>
                 Autorizo el tratamiento de mis datos personales, incluyendo datos sensibles de salud, conforme al presente aviso de privacidad de CENIDET.
@@ -208,7 +208,7 @@ export function Privacy({ onNext, onBack }) {
                 Finalidades secundarias (opcional)
               </p>
               <p style={{ fontSize: 13, color: '#374151', lineHeight: 1.55 }}>
-                También acepto el uso de datos disociados o agregados para investigación, publicaciones y mejora de los instrumentos. Puedo continuar aunque no lo acepte.
+                Acepto el uso de datos disociados o agregados para investigación, publicaciones y mejora de los instrumentos.
               </p>
             </div>
           </div>

@@ -36,6 +36,8 @@ SanEEG es el frontend de un proyecto de investigación (CENIDET) enfocado en neu
 
 ## Correr en local
 
+Requiere Node.js `^20.19.0` o `>=22.12.0` y npm.
+
 ```bash
 npm install
 npm run dev
@@ -54,6 +56,8 @@ para guardar el cuestionario, calcular resultados y generar el folio.
 | `npm run build` | Build de producción en `dist/` |
 | `npm run preview` | Sirve el build de producción localmente |
 | `npm run lint` | Corre ESLint sobre el proyecto |
+| `npm test` | Ejecuta las pruebas unitarias con Vitest |
+| `npm run test:e2e` | Ejecuta Playwright con el backend simulado del cuestionario |
 
 ## Estructura del proyecto
 
